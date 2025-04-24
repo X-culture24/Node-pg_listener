@@ -1,0 +1,105 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+  <meta charset="UTF-8">
+  <title>Event Stream Admin</title>
+  <style>
+    body {
+      font-family: Arial, sans-serif;
+      background: #f0f2f5;
+      padding: 20px;
+    }
+
+    h1 {
+      color: #333;
+    }
+
+    label, select, button {
+      margin: 5px 0;
+      display: block;
+    }
+
+    #log {
+      margin-top: 20px;
+      padding: 10px;
+      background: #fff;
+      border: 1px solid #ccc;
+      max-height: 400px;
+      overflow-y: scroll;
+      white-space: pre-wrap;
+    }
+  </style>
+</head>
+<body>
+  <h1>📡 Event Stream Admin</h1>
+
+  <label for="tableSelect">Select Table:</label>
+  <select id="tableSelect">
+    <option value="users">users</option>
+    <option value="products">products</option>
+    <option value="orders">orders</option>
+    <option value="order_items">order_items</option>
+  </select>
+
+  <label>Choose Operations:</label>
+  <label><input type="checkbox" class="operation" value="INSERT" checked> INSERT</label>
+  <label><input type="checkbox" class="operation" value="UPDATE" checked> UPDATE</label>
+  <label><input type="checkbox" class="operation" value="DELETE" checked> DELETE</label>
+
+  <button id="connectBtn">Connect & Subscribe</button>
+
+  <div id="log"></div>
+
+  <script>
+    let ws;
+
+    const connectBtn = document.getElementById('connectBtn');
+    const tableSelect = document.getElementById('tableSelect');
+    const operationsCheckboxes = document.querySelectorAll('.operation');
+    const log = document.getElementById('log');
+
+    connectBtn.onclick = () => {
+      const table = tableSelect.value;
+      const operations = Array.from(operationsCheckboxes)
+        .filter(cb => cb.checked)
+        .map(cb => cb.value);
+
+      ws = new WebSocket("ws://localhost:8080");
+
+      ws.onopen = () => {
+        logMessage(`✅ Connected to WebSocket server`);
+
+        const subscribeMessage = {
+          action: "subscribe",
+          data: { table, operations }
+        };
+        ws.send(JSON.stringify(subscribeMessage));
+        logMessage(`📥 Subscribed to ${table} for: ${operations.join(', ')}`);
+      };
+
+      ws.onmessage = (event) => {
+        const msg = JSON.parse(event.data);
+        if (msg.type === "event") {
+          logMessage(`📢 [${msg.event.event_type}] ${msg.event.table_name} - ${JSON.stringify(msg.event.data)}`);
+        } else {
+          logMessage(`🔔 ${msg.message}`);
+        }
+      };
+
+      ws.onerror = (error) => {
+        logMessage(`❌ WebSocket error: ${error.message}`);
+      };
+
+      ws.onclose = () => {
+        logMessage(`🔌 Disconnected from server`);
+      };
+    };
+
+    function logMessage(message) {
+      const time = new Date().toLocaleTimeString();
+      log.innerText += `[${time}] ${message}\n`;
+      log.scrollTop = log.scrollHeight;
+    }
+  </script>
+</body>
+</html>

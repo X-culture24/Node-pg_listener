@@ -17,12 +17,9 @@ export class EventStreamServer {
             },
             eventHistoryLimit: 1000,
             heartbeatInterval: 30000,
-            tables: process.env.TABLES_TO_MONITOR?.split(',') || [
-                'users',
-                'products',
-                'orders',
-                'order_items'
-            ],
+            tables: (process.env.TABLES_TO_MONITOR || 'users,products,orders,order_items')
+                .split(',')
+                .map(t => t.trim()),
             defaultOperations: ['INSERT', 'UPDATE', 'DELETE']
         };
 
@@ -32,7 +29,7 @@ export class EventStreamServer {
     async initialize() {
         this.initializeRedis();
         this.initializeWebSocket();
-        await this.initializeDatabase(); // Properly await this
+        await this.initializeDatabase();
     }
 
     bindMethods() {
@@ -110,7 +107,8 @@ export class EventStreamServer {
 
     async initializeDatabase() {
         this.dbClient = new Client({
-            connectionString: process.env.DATABASE_URL ||
+            connectionString:
+                process.env.DATABASE_URL ||
                 `postgres://${process.env.DB_USER}:${process.env.DB_PASSWORD}@${process.env.DB_HOST}:${process.env.DB_PORT}/${process.env.DB_NAME}`
         });
 
@@ -119,18 +117,20 @@ export class EventStreamServer {
             console.log('✅ Connected to PostgreSQL');
 
             for (const table of this.config.tables) {
-                await this.dbClient.query(`LISTEN ${table}_events`);
-                console.log(`👂 Listening for ${table} events`);
+                const channel = `${table}_events`;
+                await this.dbClient.query(`LISTEN ${channel}`);
+                console.log(`👂 Listening for ${channel}`);
             }
 
             this.dbClient.on('notification', async (msg) => {
+                console.log('📨 Notification received:', msg.channel, msg.payload); // Debug
                 try {
                     const event = JSON.parse(msg.payload);
                     if (this.shouldProcessEvent(event)) {
                         await this.processDatabaseEvent(msg.channel, event);
                     }
                 } catch (err) {
-                    console.error('Error processing notification:', err);
+                    console.error('❌ Error processing notification:', err);
                 }
             });
 
@@ -184,7 +184,7 @@ export class EventStreamServer {
                     }));
             }
         } catch (err) {
-            console.error(`Error handling client message: ${err}`);
+            console.error(`❌ Error handling client message: ${err}`);
             client.ws.send(JSON.stringify({
                 type: 'error',
                 message: 'Invalid request'
@@ -264,7 +264,6 @@ export class EventStreamServer {
     }
 }
 
-// ✅ ES Module version of "if this file is run directly"
 const currentFilePath = new URL(import.meta.url).pathname;
 const executedDirectly = process.argv[1] === currentFilePath;
 
